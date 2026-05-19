@@ -1,0 +1,45 @@
+{
+  "name": "aws-secrets-loader",
+  "version": "0.1.0",
+  "description": "Load one AWS Secrets Manager JSON secret, merge local overrides, validate with Zod, and return typed config.",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "keywords": ["aws", "secrets-manager", "secrets", "config", "env", "zod", "typescript", "esm"],
+  "license": "MIT",
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.0.0"
+  },
+  "peerDependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@changesets/cli": "^2.27.0",
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
+    "zod": "^4.0.0"
+  }
+}

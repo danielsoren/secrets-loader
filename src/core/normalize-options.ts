@@ -1,0 +1,86 @@
+import {
+  DEFAULT_CACHE_ENABLED,
+  DEFAULT_CACHE_TTL_MS,
+  DEFAULT_PROCESS_ENV_MUTATE,
+  DEFAULT_PROCESS_ENV_OVERWRITE,
+  DEFAULT_SOURCE,
+  DEFAULT_TIMEOUT_MS,
+} from "./constants.js";
+import { createError } from "./errors.js";
+import type { LoadSecretsError, LoadSecretsOptions, NormalizedOptions } from "./types.js";
+
+export type NormalizeResult =
+  | { success: true; data: NormalizedOptions }
+  | { success: false; error: LoadSecretsError };
+
+const VALID_SOURCES = new Set([
+  "aws-only",
+  "process-env-only",
+  "aws-then-process-env",
+  "process-env-then-aws",
+]);
+
+export function normalizeOptions<TSchema extends import("zod").z.ZodTypeAny>(
+  options: LoadSecretsOptions<TSchema>,
+): NormalizeResult {
+  const source = options.source ?? DEFAULT_SOURCE;
+  if (!VALID_SOURCES.has(source)) {
+    return { success: false, error: createError("INVALID_OPTIONS") };
+  }
+
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return { success: false, error: createError("INVALID_OPTIONS") };
+  }
+
+  const cacheEnabled = options.cache?.enabled ?? DEFAULT_CACHE_ENABLED;
+  const cacheTtlMs = options.cache?.ttlMs ?? DEFAULT_CACHE_TTL_MS;
+  if (cacheEnabled && (!Number.isFinite(cacheTtlMs) || cacheTtlMs <= 0)) {
+    return { success: false, error: createError("INVALID_OPTIONS") };
+  }
+
+  const mutate = options.processEnv?.mutate ?? DEFAULT_PROCESS_ENV_MUTATE;
+  const overwrite = options.processEnv?.overwrite ?? DEFAULT_PROCESS_ENV_OVERWRITE;
+
+  const awsInput = options.aws;
+  const aws: NormalizedOptions["aws"] = {};
+  if (awsInput?.secretId !== undefined && awsInput.secretId.length > 0) {
+    aws.secretId = awsInput.secretId;
+  }
+  if (awsInput?.region !== undefined && awsInput.region.length > 0) {
+    aws.region = awsInput.region;
+  }
+  if (awsInput?.credentials !== undefined) {
+    const c = awsInput.credentials;
+    if (
+      typeof c.accessKeyId !== "string" ||
+      c.accessKeyId.length === 0 ||
+      typeof c.secretAccessKey !== "string" ||
+      c.secretAccessKey.length === 0
+    ) {
+      return { success: false, error: createError("INVALID_OPTIONS") };
+    }
+    aws.credentials = {
+      accessKeyId: c.accessKeyId,
+      secretAccessKey: c.secretAccessKey,
+      ...(c.sessionToken !== undefined ? { sessionToken: c.sessionToken } : {}),
+    };
+  }
+
+  return {
+    success: true,
+    data: {
+      source,
+      timeoutMs,
+      aws,
+      cache: {
+        enabled: cacheEnabled,
+        ttlMs: cacheTtlMs,
+      },
+      processEnv: {
+        mutate,
+        overwrite,
+      },
+    },
+  };
+}
