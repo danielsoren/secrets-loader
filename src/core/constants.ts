@@ -1,6 +1,6 @@
 import type { SecretSourceMode } from "./types.js";
 
-export const DEFAULT_SOURCE: SecretSourceMode = "aws-then-process-env";
+export const DEFAULT_SOURCE: SecretSourceMode = "provider-then-process-env";
 export const DEFAULT_TIMEOUT_MS = 5000;
 export const DEFAULT_CACHE_ENABLED = false;
 export const DEFAULT_CACHE_TTL_MS = 60_000;

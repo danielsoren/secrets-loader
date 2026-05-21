@@ -1,7 +1,7 @@
 {
-  "name": "aws-secrets-loader",
+  "name": "@danielsoren/secrets-loader",
   "version": "0.1.1",
-  "description": "Load one AWS Secrets Manager JSON secret, merge local overrides, validate with Zod, and return typed config.",
+  "description": "Load one JSON secret from a provider (AWS today; pluggable in the future), merge local overrides, validate with Zod, and return typed config.",
   "type": "module",
   "sideEffects": false,
   "engines": {
@@ -25,7 +25,7 @@
     "test:watch": "vitest",
     "prepublishOnly": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
-  "keywords": ["aws", "secrets-manager", "secrets", "config", "env", "zod", "typescript", "esm"],
+  "keywords": ["secrets", "secrets-manager", "aws", "config", "env", "zod", "typescript", "esm"],
   "license": "MIT",
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.0.0"

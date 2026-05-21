@@ -1,10 +1,10 @@
 import type { z } from "zod";
 
 export type SecretSourceMode =
-  | "aws-only"
+  | "provider-only"
   | "process-env-only"
-  | "aws-then-process-env"
-  | "process-env-then-aws";
+  | "provider-then-process-env"
+  | "process-env-then-provider";
 
 export type AwsCredentialsOption = {
   accessKeyId: string;
@@ -16,6 +16,10 @@ export type AwsOption = {
   secretId?: string;
   region?: string;
   credentials?: AwsCredentialsOption;
+};
+
+export type ProvidersOption = {
+  aws?: AwsOption;
 };
 
 export type CacheOption = {
@@ -30,7 +34,7 @@ export type ProcessEnvOption = {
 
 export type LoadSecretsOptions<TSchema extends z.ZodTypeAny> = {
   schema: TSchema;
-  aws?: AwsOption;
+  providers?: ProvidersOption;
   source?: SecretSourceMode;
   timeoutMs?: number;
   cache?: CacheOption;
@@ -104,10 +108,12 @@ export type LoadSecretsResult<TData> = LoadSecretsSuccess<TData> | LoadSecretsFa
 export type NormalizedOptions = {
   source: SecretSourceMode;
   timeoutMs: number;
-  aws: {
-    secretId?: string;
-    region?: string;
-    credentials?: AwsCredentialsOption;
+  providers: {
+    aws: {
+      secretId?: string;
+      region?: string;
+      credentials?: AwsCredentialsOption;
+    };
   };
   cache: {
     enabled: boolean;

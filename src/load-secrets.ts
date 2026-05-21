@@ -5,7 +5,7 @@ import { createError } from "./core/errors.js";
 import { mergeSources } from "./core/merge-sources.js";
 import { normalizeOptions } from "./core/normalize-options.js";
 import { mutateProcessEnv, snapshotProcessEnv } from "./core/process-env.js";
-import { sourceUsesAws, sourceUsesProcessEnv } from "./core/resolve-source-mode.js";
+import { sourceUsesProcessEnv, sourceUsesProvider } from "./core/resolve-source-mode.js";
 import { failure, success } from "./core/result.js";
 import type {
   LoadSecretsMeta,
@@ -25,7 +25,7 @@ function createInitialMeta(normalized: NormalizedOptions): LoadSecretsMeta {
       hit: false,
     },
     usedSources: {
-      aws: sourceUsesAws(normalized.source),
+      aws: sourceUsesProvider(normalized.source),
       processEnv: sourceUsesProcessEnv(normalized.source),
     },
     processEnvMutation: {
@@ -36,11 +36,11 @@ function createInitialMeta(normalized: NormalizedOptions): LoadSecretsMeta {
       skippedKeys: [],
     },
   };
-  if (normalized.aws.secretId !== undefined) {
-    meta.secretId = normalized.aws.secretId;
+  if (normalized.providers.aws.secretId !== undefined) {
+    meta.secretId = normalized.providers.aws.secretId;
   }
-  if (normalized.aws.region !== undefined) {
-    meta.region = normalized.aws.region;
+  if (normalized.providers.aws.region !== undefined) {
+    meta.region = normalized.providers.aws.region;
   }
   if (normalized.cache.enabled) {
     meta.cache.ttlMs = normalized.cache.ttlMs;
@@ -54,13 +54,14 @@ export async function loadSecrets<TSchema extends z.ZodTypeAny>(
   const normalizedResult = normalizeOptions(options);
 
   if (!normalizedResult.success) {
+    const reportedSource = options.source ?? "provider-then-process-env";
     const baseMeta: LoadSecretsMeta = {
-      source: options.source ?? "aws-then-process-env",
+      source: reportedSource,
       loadedAt: new Date(),
       cache: { enabled: false, hit: false },
       usedSources: {
-        aws: sourceUsesAws(options.source ?? "aws-then-process-env"),
-        processEnv: sourceUsesProcessEnv(options.source ?? "aws-then-process-env"),
+        aws: sourceUsesProvider(reportedSource),
+        processEnv: sourceUsesProcessEnv(reportedSource),
       },
       processEnvMutation: {
         requested: options.processEnv?.mutate ?? false,
@@ -77,16 +78,17 @@ export async function loadSecrets<TSchema extends z.ZodTypeAny>(
   const meta = createInitialMeta(normalized);
 
   try {
-    let awsValues: Record<string, unknown> | undefined;
+    let providerValues: Record<string, unknown> | undefined;
     let processEnvValues: Record<string, string | undefined> | undefined;
 
-    if (sourceUsesAws(normalized.source)) {
-      if (normalized.aws.secretId === undefined || normalized.aws.secretId.length === 0) {
+    if (sourceUsesProvider(normalized.source)) {
+      const aws = normalized.providers.aws;
+      if (aws.secretId === undefined || aws.secretId.length === 0) {
         return failure(meta, createError("AWS_SECRET_ID_MISSING"));
       }
 
       let secretString: string | null = null;
-      const cacheKey = buildCacheKey(normalized.aws.secretId, normalized.aws.region);
+      const cacheKey = buildCacheKey(aws.secretId, aws.region);
 
       if (normalized.cache.enabled) {
         secretString = getCachedSecretString(cacheKey);
@@ -97,12 +99,10 @@ export async function loadSecrets<TSchema extends z.ZodTypeAny>(
 
       if (secretString === null) {
         const fetchResult = await fetchSecretString({
-          secretId: normalized.aws.secretId,
+          secretId: aws.secretId,
           timeoutMs: normalized.timeoutMs,
-          ...(normalized.aws.region !== undefined ? { region: normalized.aws.region } : {}),
-          ...(normalized.aws.credentials !== undefined
-            ? { credentials: normalized.aws.credentials }
-            : {}),
+          ...(aws.region !== undefined ? { region: aws.region } : {}),
+          ...(aws.credentials !== undefined ? { credentials: aws.credentials } : {}),
         });
 
         if (!fetchResult.success) {
@@ -120,7 +120,7 @@ export async function loadSecrets<TSchema extends z.ZodTypeAny>(
       if (!parsed.success) {
         return failure(meta, parsed.error);
       }
-      awsValues = parsed.data;
+      providerValues = parsed.data;
     }
 
     if (sourceUsesProcessEnv(normalized.source)) {
@@ -129,7 +129,7 @@ export async function loadSecrets<TSchema extends z.ZodTypeAny>(
 
     const merged = mergeSources({
       source: normalized.source,
-      ...(awsValues !== undefined ? { awsValues } : {}),
+      ...(providerValues !== undefined ? { providerValues } : {}),
       ...(processEnvValues !== undefined ? { processEnvValues } : {}),
     });
 

@@ -12,5 +12,6 @@ export type {
   LoadSecretsResult,
   LoadSecretsSuccess,
   ProcessEnvOption,
+  ProvidersOption,
   SecretSourceMode,
 } from "./core/types.js";

@@ -80,8 +80,8 @@ describe("loadSecrets — AWS happy path", () => {
 
     const result = await loadSecrets({
       schema,
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
     });
 
     expect(result.success).toBe(true);
@@ -104,8 +104,8 @@ describe("loadSecrets — AWS happy path", () => {
 
     const result = await loadSecrets({
       schema,
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
     });
 
     expect(result.success).toBe(true);
@@ -114,7 +114,7 @@ describe("loadSecrets — AWS happy path", () => {
 });
 
 describe("loadSecrets — source modes", () => {
-  it("defaults to aws-then-process-env: env overrides AWS", async () => {
+  it("defaults to provider-then-process-env: env overrides provider", async () => {
     sendMock.mockResolvedValueOnce({
       SecretString: JSON.stringify({ TEST_DB_URL: "https://aws.example/app" }),
     });
@@ -124,17 +124,17 @@ describe("loadSecrets — source modes", () => {
 
     const result = await loadSecrets({
       schema,
-      aws: { secretId: "prod/x" },
+      providers: { aws: { secretId: "prod/x" } },
     });
 
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.TEST_DB_URL).toBe("https://local.example/app");
-      expect(result.meta.source).toBe("aws-then-process-env");
+      expect(result.meta.source).toBe("provider-then-process-env");
     }
   });
 
-  it("process-env-then-aws: AWS overrides env", async () => {
+  it("process-env-then-provider: provider overrides env", async () => {
     sendMock.mockResolvedValueOnce({
       SecretString: JSON.stringify({ TEST_DB_URL: "https://aws.example/app" }),
     });
@@ -144,8 +144,8 @@ describe("loadSecrets — source modes", () => {
 
     const result = await loadSecrets({
       schema,
-      source: "process-env-then-aws",
-      aws: { secretId: "prod/x" },
+      source: "process-env-then-provider",
+      providers: { aws: { secretId: "prod/x" } },
     });
 
     expect(result.success).toBe(true);
@@ -169,7 +169,7 @@ describe("loadSecrets — source modes", () => {
     }
   });
 
-  it("aws-only ignores process.env values", async () => {
+  it("provider-only ignores process.env values", async () => {
     sendMock.mockResolvedValueOnce({
       SecretString: JSON.stringify({ TEST_DB_URL: "https://aws.example/app" }),
     });
@@ -179,8 +179,8 @@ describe("loadSecrets — source modes", () => {
 
     const result = await loadSecrets({
       schema,
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
     });
 
     expect(result.success).toBe(true);
@@ -191,9 +191,9 @@ describe("loadSecrets — source modes", () => {
 });
 
 describe("loadSecrets — failures", () => {
-  it("returns AWS_SECRET_ID_MISSING when AWS mode lacks secretId", async () => {
+  it("returns AWS_SECRET_ID_MISSING when provider mode lacks secretId", async () => {
     const schema = z.object({});
-    const result = await loadSecrets({ schema, source: "aws-only" });
+    const result = await loadSecrets({ schema, source: "provider-only" });
 
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -206,8 +206,8 @@ describe("loadSecrets — failures", () => {
     sendMock.mockResolvedValueOnce({ SecretString: "{not-json" });
     const result = await loadSecrets({
       schema: z.object({}),
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
     });
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -220,8 +220,8 @@ describe("loadSecrets — failures", () => {
     sendMock.mockResolvedValueOnce({ SecretString: "[1,2]" });
     const result = await loadSecrets({
       schema: z.object({}),
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
     });
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -233,8 +233,8 @@ describe("loadSecrets — failures", () => {
     sendMock.mockResolvedValueOnce({ SecretBinary: new Uint8Array([1, 2, 3]) });
     const result = await loadSecrets({
       schema: z.object({}),
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
     });
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -246,8 +246,8 @@ describe("loadSecrets — failures", () => {
     sendMock.mockResolvedValueOnce({});
     const result = await loadSecrets({
       schema: z.object({}),
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
     });
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -259,8 +259,8 @@ describe("loadSecrets — failures", () => {
     sendMock.mockRejectedValueOnce(new Error("boom"));
     const result = await loadSecrets({
       schema: z.object({}),
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
     });
     expect(result.success).toBe(false);
     if (!result.success) {
@@ -274,8 +274,8 @@ describe("loadSecrets — failures", () => {
 
     const promise = loadSecrets({
       schema: z.object({}),
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
       timeoutMs: 100,
     });
     // attach a handler before advancing fake timers so the rejection-then-resolution path is observed
@@ -317,10 +317,12 @@ describe("loadSecrets — failures", () => {
   it("returns INVALID_OPTIONS when explicit credentials are incomplete", async () => {
     const result = await loadSecrets({
       schema: z.object({}),
-      source: "aws-only",
-      aws: {
-        secretId: "prod/x",
-        credentials: { accessKeyId: "", secretAccessKey: "x" },
+      source: "provider-only",
+      providers: {
+        aws: {
+          secretId: "prod/x",
+          credentials: { accessKeyId: "", secretAccessKey: "x" },
+        },
       },
     });
     expect(result.success).toBe(false);
@@ -340,8 +342,8 @@ describe("loadSecrets — schema validation redaction", () => {
 
     const result = await loadSecrets({
       schema,
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
     });
 
     expect(result.success).toBe(false);
@@ -364,8 +366,8 @@ describe("loadSecrets — process.env mutation", () => {
     const schema = z.object({ TEST_FROM_AWS: z.string() });
     const result = await loadSecrets({
       schema,
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
     });
     expect(result.success).toBe(true);
     expect(process.env["TEST_FROM_AWS"]).toBeUndefined();
@@ -384,8 +386,8 @@ describe("loadSecrets — process.env mutation", () => {
     });
     const result = await loadSecrets({
       schema,
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
       processEnv: { mutate: true, overwrite: true },
     });
 
@@ -408,8 +410,8 @@ describe("loadSecrets — process.env mutation", () => {
     const schema = z.object({ TEST_JWT: z.string().min(32) });
     const result = await loadSecrets({
       schema,
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
       processEnv: { mutate: true, overwrite: true },
     });
 
@@ -425,8 +427,8 @@ describe("loadSecrets — process.env mutation", () => {
     const schema = z.object({ TEST_FROM_AWS: z.string() });
     const result = await loadSecrets({
       schema,
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
       processEnv: { mutate: true, overwrite: false },
     });
 
@@ -445,8 +447,8 @@ describe("loadSecrets — process.env mutation", () => {
     const schema = z.object({ TEST_FROM_AWS: z.string() });
     const result = await loadSecrets({
       schema,
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
       processEnv: { mutate: true, overwrite: true },
     });
 
@@ -462,8 +464,16 @@ describe("loadSecrets — cache", () => {
     });
     const schema = z.object({ TEST_FLAG: z.string() });
 
-    await loadSecrets({ schema, source: "aws-only", aws: { secretId: "prod/x" } });
-    await loadSecrets({ schema, source: "aws-only", aws: { secretId: "prod/x" } });
+    await loadSecrets({
+      schema,
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
+    });
+    await loadSecrets({
+      schema,
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
+    });
 
     expect(sendMock).toHaveBeenCalledTimes(2);
   });
@@ -476,8 +486,8 @@ describe("loadSecrets — cache", () => {
 
     const first = await loadSecrets({
       schema,
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
       cache: { enabled: true, ttlMs: 60_000 },
     });
     expect(first.success).toBe(true);
@@ -485,8 +495,8 @@ describe("loadSecrets — cache", () => {
 
     const second = await loadSecrets({
       schema,
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
       cache: { enabled: true, ttlMs: 60_000 },
     });
     expect(second.success).toBe(true);
@@ -505,8 +515,8 @@ describe("loadSecrets — cache", () => {
 
     await loadSecrets({
       schema,
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
       cache: { enabled: true, ttlMs: 1000 },
     });
     expect(sendMock).toHaveBeenCalledTimes(1);
@@ -514,8 +524,8 @@ describe("loadSecrets — cache", () => {
     vi.setSystemTime(new Date("2026-01-01T00:00:02.000Z"));
     await loadSecrets({
       schema,
-      source: "aws-only",
-      aws: { secretId: "prod/x" },
+      source: "provider-only",
+      providers: { aws: { secretId: "prod/x" } },
       cache: { enabled: true, ttlMs: 1000 },
     });
     expect(sendMock).toHaveBeenCalledTimes(2);
@@ -533,7 +543,7 @@ describe("loadSecrets — cache", () => {
     process.env["TEST_FROM_ENV"] = "one";
     const first = await loadSecrets({
       schema,
-      aws: { secretId: "prod/x" },
+      providers: { aws: { secretId: "prod/x" } },
       cache: { enabled: true, ttlMs: 60_000 },
     });
     expect(first.success).toBe(true);
@@ -542,7 +552,7 @@ describe("loadSecrets — cache", () => {
     process.env["TEST_FROM_ENV"] = "two";
     const second = await loadSecrets({
       schema,
-      aws: { secretId: "prod/x" },
+      providers: { aws: { secretId: "prod/x" } },
       cache: { enabled: true, ttlMs: 60_000 },
     });
     expect(second.success).toBe(true);

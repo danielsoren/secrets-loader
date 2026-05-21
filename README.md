@@ -1,9 +1,11 @@
-# aws-secrets-loader
+# @danielsoren/secrets-loader
 
-Load one AWS Secrets Manager JSON secret, merge local overrides, validate with Zod, and return typed backend config.
+Load one JSON secret from a provider, merge local overrides, validate with Zod, and return typed backend config.
+
+> **Provider support:** AWS Secrets Manager today. The API is shaped so other providers (e.g. GCP, Vault) can plug in later without breaking changes.
 
 ```ts
-import { loadSecrets } from "aws-secrets-loader";
+import { loadSecrets } from "@danielsoren/secrets-loader";
 import { z } from "zod";
 
 const schema = z.object({
@@ -15,8 +17,8 @@ const schema = z.object({
 
 const result = await loadSecrets({
   schema,
-  aws: {
-    secretId: "prod/my-api",
+  providers: {
+    aws: { secretId: "prod/my-api" },
   },
 });
 
@@ -31,11 +33,11 @@ await app.listen(result.data.PORT);
 
 ## Why this package exists
 
-AWS Secrets Manager is a good place to store backend secrets, but loading secrets at runtime creates one awkward problem: secrets are async, while app configuration often wants to be available before anything else starts.
+A managed secret store is a good place to keep backend secrets, but loading them at runtime creates one awkward problem: secrets are async, while app configuration often wants to be available before anything else starts.
 
 This package makes that startup step explicit:
 
-1. fetch one AWS Secrets Manager secret.
+1. fetch one secret from a configured provider (AWS today).
 2. parse it as a JSON object.
 3. merge it with local `process.env` if configured.
 4. validate it with Zod.
@@ -57,20 +59,20 @@ This package is not intended for browser/frontend usage.
 ## Installation
 
 ```bash
-npm install aws-secrets-loader zod
+npm install @danielsoren/secrets-loader zod
 ```
 
 or:
 
 ```bash
-pnpm add aws-secrets-loader zod
+pnpm add @danielsoren/secrets-loader zod
 ```
 
-The package uses AWS SDK v3 internally. `zod` is a peer dependency.
+The AWS provider uses AWS SDK v3 internally. `zod` is a peer dependency.
 
-## AWS secret format
+## Secret format
 
-Store one JSON object in AWS Secrets Manager as `SecretString`:
+Store one JSON object as the secret value (`SecretString` in AWS Secrets Manager):
 
 ```json
 {
@@ -83,12 +85,12 @@ Store one JSON object in AWS Secrets Manager as `SecretString`:
 
 Top-level arrays, strings, numbers, booleans, and `null` are invalid.
 
-`SecretBinary` is not supported in v1.
+For AWS, `SecretBinary` is not supported in v1.
 
 ## Recommended usage: load first, then compose your app
 
 ```ts
-import { loadSecrets } from "aws-secrets-loader";
+import { loadSecrets } from "@danielsoren/secrets-loader";
 import { z } from "zod";
 import { createApp } from "./app.js";
 
@@ -101,8 +103,8 @@ const schema = z.object({
 
 const result = await loadSecrets({
   schema,
-  aws: {
-    secretId: "prod/my-api",
+  providers: {
+    aws: { secretId: "prod/my-api" },
   },
 });
 
@@ -141,38 +143,38 @@ Dependency-injection style is the safest approach: app startup is deterministic 
 
 ## Source modes
 
-`loadSecrets` can combine AWS secret values and local `process.env` values.
+`loadSecrets` can combine provider values and local `process.env` values.
 
 Default mode:
 
 ```ts
-"aws-then-process-env"
+"provider-then-process-env"
 ```
 
-AWS values are loaded first, then local environment variables override them.
+Provider values are loaded first, then local environment variables override them.
 
-| Mode | AWS fetch? | Uses process.env? | Priority |
+| Mode | Provider fetch? | Uses process.env? | Priority |
 |---|---:|---:|---|
-| `aws-only` | yes | no | AWS only |
+| `provider-only` | yes | no | provider only |
 | `process-env-only` | no | yes | local only |
-| `aws-then-process-env` | yes | yes | `process.env` overrides AWS |
-| `process-env-then-aws` | yes | yes | AWS overrides `process.env` |
+| `provider-then-process-env` | yes | yes | `process.env` overrides provider |
+| `process-env-then-provider` | yes | yes | provider overrides `process.env` |
 
 Example:
 
 ```ts
 const result = await loadSecrets({
   schema,
-  source: "process-env-then-aws",
-  aws: {
-    secretId: "prod/my-api",
+  source: "process-env-then-provider",
+  providers: {
+    aws: { secretId: "prod/my-api" },
   },
 });
 ```
 
 ## Local-only mode
 
-Useful for tests, local scripts, or environments where AWS is not available:
+Useful for tests, local scripts, or environments where the provider is not available:
 
 ```ts
 const result = await loadSecrets({
@@ -181,25 +183,31 @@ const result = await loadSecrets({
 });
 ```
 
-In this mode, `secretId` is not required and AWS is not called.
+In this mode, no provider config is required and no provider is called.
 
-## AWS region and credentials
+## AWS provider
+
+The AWS provider reads from AWS Secrets Manager. Configure it under `providers.aws`.
+
+### Region and credentials
 
 You can pass a region explicitly:
 
 ```ts
 const result = await loadSecrets({
   schema,
-  aws: {
-    secretId: "prod/my-api",
-    region: "eu-central-1",
+  providers: {
+    aws: {
+      secretId: "prod/my-api",
+      region: "eu-central-1",
+    },
   },
 });
 ```
 
 If `region` is omitted, AWS SDK default region resolution is used.
 
-Credentials are also resolved by AWS SDK by default. You may either omit credentials and use normal AWS SDK mechanisms, or pass explicit credentials through `aws.credentials`.
+Credentials are also resolved by AWS SDK by default. You may either omit credentials and use normal AWS SDK mechanisms, or pass explicit credentials through `providers.aws.credentials`.
 
 Normal AWS SDK mechanisms include:
 
@@ -220,13 +228,15 @@ You can also pass explicit credentials when needed:
 ```ts
 const result = await loadSecrets({
   schema,
-  aws: {
-    secretId: "prod/my-api",
-    region: "eu-central-1",
-    credentials: {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-      sessionToken: process.env.AWS_SESSION_TOKEN,
+  providers: {
+    aws: {
+      secretId: "prod/my-api",
+      region: "eu-central-1",
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+        sessionToken: process.env.AWS_SESSION_TOKEN,
+      },
     },
   },
 });
@@ -259,7 +269,10 @@ if (result.success) {
 `loadSecrets` does not intentionally throw for expected failures. It returns a discriminated union:
 
 ```ts
-const result = await loadSecrets({ schema, aws: { secretId } });
+const result = await loadSecrets({
+  schema,
+  providers: { aws: { secretId } },
+});
 
 if (result.success) {
   result.data;
@@ -279,7 +292,7 @@ Success:
   data: { DATABASE_URL: "...", PORT: 3000 },
   error: null,
   meta: {
-    source: "aws-then-process-env",
+    source: "provider-then-process-env",
     secretId: "prod/my-api",
     loadedAt: new Date(),
     cache: { enabled: false, hit: false },
@@ -327,6 +340,8 @@ type LoadSecretsErrorCode =
   | "UNKNOWN";
 ```
 
+`AWS_*` codes are emitted when the AWS provider is in use. Future providers will introduce their own prefixed codes alongside these.
+
 Package-generated `message` fields are sanitized and never contain secret values. The optional `cause` field may contain the raw SDK or system error — do not blindly `JSON.stringify(result.error)` into public logs if you cannot trust upstream error contents.
 
 ## Optional process.env mutation
@@ -338,8 +353,8 @@ You can enable mutation:
 ```ts
 const result = await loadSecrets({
   schema,
-  aws: {
-    secretId: "prod/my-api",
+  providers: {
+    aws: { secretId: "prod/my-api" },
   },
   processEnv: {
     mutate: true,
@@ -378,8 +393,8 @@ Cache is disabled by default.
 ```ts
 const result = await loadSecrets({
   schema,
-  aws: {
-    secretId: "prod/my-api",
+  providers: {
+    aws: { secretId: "prod/my-api" },
   },
   cache: {
     enabled: true,
@@ -388,17 +403,17 @@ const result = await loadSecrets({
 });
 ```
 
-The cache stores only the AWS `SecretString`, not the final validated config. That means:
+The cache stores only the fetched secret string, not the final validated config. That means:
 
-- repeated AWS calls can be avoided.
+- repeated provider calls can be avoided.
 - `process.env` is still re-read on every call.
 - validation still runs on every call.
 
-Security note: enabling the cache keeps the AWS `SecretString` in process memory until TTL expires.
+Security note: enabling the cache keeps the secret string in process memory until TTL expires.
 
 ## Timeout
 
-Default AWS fetch timeout:
+Default provider fetch timeout:
 
 ```ts
 5000 // milliseconds
@@ -409,7 +424,7 @@ Override:
 ```ts
 const result = await loadSecrets({
   schema,
-  aws: { secretId: "prod/my-api" },
+  providers: { aws: { secretId: "prod/my-api" } },
   timeoutMs: 10_000,
 });
 ```
@@ -421,7 +436,10 @@ If the timeout is reached, the error code is `"TIMEOUT"`.
 ### Hono
 
 ```ts
-const result = await loadSecrets({ schema, aws: { secretId: "prod/api" } });
+const result = await loadSecrets({
+  schema,
+  providers: { aws: { secretId: "prod/api" } },
+});
 if (!result.success) {
   console.error(result.error.message);
   process.exit(1);
@@ -437,7 +455,10 @@ app.use("*", async (c, next) => {
 ### Express
 
 ```ts
-const result = await loadSecrets({ schema, aws: { secretId: "prod/api" } });
+const result = await loadSecrets({
+  schema,
+  providers: { aws: { secretId: "prod/api" } },
+});
 if (!result.success) {
   console.error(result.error.message);
   process.exit(1);
@@ -456,7 +477,10 @@ app.listen(env.PORT);
 ### Generic service composition
 
 ```ts
-const result = await loadSecrets({ schema, aws: { secretId: "prod/worker" } });
+const result = await loadSecrets({
+  schema,
+  providers: { aws: { secretId: "prod/worker" } },
+});
 if (!result.success) {
   console.error(result.error.message);
   process.exit(1);
@@ -470,7 +494,7 @@ const worker = createWorker({
 await worker.start();
 ```
 
-## Recommended IAM policy
+## Recommended IAM policy (AWS)
 
 Prefer least privilege:
 
@@ -487,7 +511,7 @@ Prefer least privilege:
 - Do not use this package in frontend code.
 - Do not embed loaded secrets into frontend bundles.
 - Do not log `result.data`.
-- Do not log raw AWS errors if your logging pipeline is public or shared.
+- Do not log raw provider errors if your logging pipeline is public or shared.
 - Package-generated error messages are sanitized and do not include secret values.
 - `process.env` mutation is off by default.
 - Cache is off by default.
@@ -497,15 +521,24 @@ Prefer least privilege:
 
 v1 intentionally does not support:
 
-- multiple AWS secrets in one call.
-- `SecretBinary`.
+- multiple secrets in one call.
+- providers other than AWS Secrets Manager.
+- AWS `SecretBinary`.
 - custom AWS endpoints.
 - LocalStack-specific configuration.
-- custom provider injection.
 - browser usage.
 - CommonJS.
 - throwing mode.
 - automatic import-time loading.
+
+## Roadmap
+
+The `providers.aws` shape is designed so additional providers can be added without breaking the existing API. Likely future additions:
+
+- additional cloud providers (e.g. GCP Secret Manager, HashiCorp Vault).
+- custom provider injection.
+
+These are not implemented yet.
 
 ## Bad patterns to avoid
 
@@ -515,7 +548,10 @@ Avoid async global initialization soup:
 // avoid
 export let env;
 
-loadSecrets({ schema, aws: { secretId: "prod/api" } }).then((result) => {
+loadSecrets({
+  schema,
+  providers: { aws: { secretId: "prod/api" } },
+}).then((result) => {
   if (result.success) {
     env = result.data;
   }
@@ -525,7 +561,10 @@ loadSecrets({ schema, aws: { secretId: "prod/api" } }).then((result) => {
 Prefer explicit startup:
 
 ```ts
-const result = await loadSecrets({ schema, aws: { secretId: "prod/api" } });
+const result = await loadSecrets({
+  schema,
+  providers: { aws: { secretId: "prod/api" } },
+});
 
 if (!result.success) {
   process.exit(1);

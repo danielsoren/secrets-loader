@@ -2,21 +2,21 @@ import type { SecretSourceMode } from "./types.js";
 
 export type MergeSourcesInput = {
   source: SecretSourceMode;
-  awsValues?: Record<string, unknown>;
+  providerValues?: Record<string, unknown>;
   processEnvValues?: Record<string, string | undefined>;
 };
 
 export function mergeSources(input: MergeSourcesInput): Record<string, unknown> {
-  const { source, awsValues, processEnvValues } = input;
+  const { source, providerValues, processEnvValues } = input;
 
   switch (source) {
-    case "aws-only":
-      return { ...(awsValues ?? {}) };
+    case "provider-only":
+      return { ...(providerValues ?? {}) };
     case "process-env-only":
       return { ...(processEnvValues ?? {}) };
-    case "aws-then-process-env":
-      return { ...(awsValues ?? {}), ...(processEnvValues ?? {}) };
-    case "process-env-then-aws":
-      return { ...(processEnvValues ?? {}), ...(awsValues ?? {}) };
+    case "provider-then-process-env":
+      return { ...(providerValues ?? {}), ...(processEnvValues ?? {}) };
+    case "process-env-then-provider":
+      return { ...(processEnvValues ?? {}), ...(providerValues ?? {}) };
   }
 }

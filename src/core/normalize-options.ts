@@ -14,10 +14,10 @@ export type NormalizeResult =
   | { success: false; error: LoadSecretsError };
 
 const VALID_SOURCES = new Set([
-  "aws-only",
+  "provider-only",
   "process-env-only",
-  "aws-then-process-env",
-  "process-env-then-aws",
+  "provider-then-process-env",
+  "process-env-then-provider",
 ]);
 
 export function normalizeOptions<TSchema extends import("zod").z.ZodTypeAny>(
@@ -42,8 +42,8 @@ export function normalizeOptions<TSchema extends import("zod").z.ZodTypeAny>(
   const mutate = options.processEnv?.mutate ?? DEFAULT_PROCESS_ENV_MUTATE;
   const overwrite = options.processEnv?.overwrite ?? DEFAULT_PROCESS_ENV_OVERWRITE;
 
-  const awsInput = options.aws;
-  const aws: NormalizedOptions["aws"] = {};
+  const awsInput = options.providers?.aws;
+  const aws: NormalizedOptions["providers"]["aws"] = {};
   if (awsInput?.secretId !== undefined && awsInput.secretId.length > 0) {
     aws.secretId = awsInput.secretId;
   }
@@ -72,7 +72,7 @@ export function normalizeOptions<TSchema extends import("zod").z.ZodTypeAny>(
     data: {
       source,
       timeoutMs,
-      aws,
+      providers: { aws },
       cache: {
         enabled: cacheEnabled,
         ttlMs: cacheTtlMs,
