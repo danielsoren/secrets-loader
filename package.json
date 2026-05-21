@@ -1,6 +1,6 @@
 {
   "name": "@danielsoren/secrets-loader",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "description": "Load one JSON secret from a provider (AWS today; pluggable in the future), merge local overrides, validate with Zod, and return typed config.",
   "type": "module",
   "sideEffects": false,
