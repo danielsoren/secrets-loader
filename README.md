@@ -550,7 +550,7 @@ Rules:
 - If `processEnv.mutate: true` is set alongside `autoRefresh`, each successful refresh also rewrites `process.env` (subject to the same overwrite rules as the initial load).
 - If a refresh fails (AWS down, validation rejects the new payload, etc.), `onRefreshError` is called and the cached value is **not** updated. The next tick fires on schedule — there is no backoff in v1.
 - If a refresh tick is still in flight when the next interval fires, the new tick is skipped.
-- Calling `loadSecrets` twice for the same `(region, secretId)` with `autoRefresh` replaces the prior timer rather than stacking.
+- Calling `loadSecrets` (or `loadSecretsStore`) twice for the same `(region, secretId)` with `autoRefresh` creates **two independent refresh timers**. Each call manages its own lifecycle via its own `result.stop()` / `store.stop()`. Both will hit AWS on schedule — use `stopAllAutoRefresh()` for a single sweep.
 - `result.stop()` clears the timer for that secret. The timer is `setInterval(...).unref()`, so it never blocks process exit on its own, but explicit teardown is still recommended in tests and graceful-shutdown paths.
 - `stopAllAutoRefresh()` is exported for test teardown and emergency stops:
 
