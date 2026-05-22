@@ -32,6 +32,9 @@
   },
   "keywords": ["secrets", "secrets-manager", "aws", "config", "env", "zod", "typescript", "esm"],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.0.0"
   },
