@@ -1,6 +1,12 @@
 import type { z } from "zod";
 import { fetchSecretString } from "./aws/fetch-secret-string";
-import { buildCacheKey, getCachedSecretString, setCachedSecretString } from "./core/cache";
+import {
+  buildCacheKey,
+  getCachedSecretString,
+  setCachedSecretString,
+  startAutoRefresh,
+  stopAutoRefresh,
+} from "./core/cache";
 import { createError } from "./core/errors";
 import { mergeSources } from "./core/merge-sources";
 import { normalizeOptions } from "./core/normalize-options";
@@ -10,6 +16,7 @@ import { resolveProviders, resolveSource } from "./core/resolve-options-fn";
 import { sourceUsesProcessEnv, sourceUsesProvider } from "./core/resolve-source-mode";
 import { failure, success } from "./core/result";
 import type {
+  LoadSecretsError,
   LoadSecretsMeta,
   LoadSecretsOptions,
   LoadSecretsResult,
@@ -27,6 +34,7 @@ function createInitialMeta(normalized: NormalizedOptions): LoadSecretsMeta {
     cache: {
       enabled: normalized.cache.enabled,
       hit: false,
+      autoRefresh: normalized.cache.autoRefresh,
     },
     usedSources: {
       aws: sourceUsesProvider(normalized.source),
@@ -59,7 +67,7 @@ function buildBaseMeta(
   return {
     source: reportedSource,
     loadedAt: new Date(),
-    cache: { enabled: false, hit: false },
+    cache: { enabled: false, hit: false, autoRefresh: false },
     usedSources: {
       aws: sourceUsesProvider(reportedSource),
       processEnv: sourceUsesProcessEnv(reportedSource),
@@ -71,6 +79,111 @@ function buildBaseMeta(
       writtenKeys: [],
       skippedKeys: [],
     },
+  };
+}
+
+type RefreshTickArgs<TSchema extends z.ZodTypeAny> = {
+  schema: TSchema;
+  normalized: NormalizedOptions;
+  cacheKey: string;
+  onRefresh?: (env: z.output<TSchema>, meta: LoadSecretsMeta) => void;
+  onRefreshError?: (error: LoadSecretsError) => void;
+};
+
+function safeInvoke<T extends (...args: never[]) => void>(
+  fn: T | undefined,
+  ...args: Parameters<T>
+): void {
+  if (fn === undefined) return;
+  try {
+    fn(...args);
+  } catch {
+    // Callback errors are swallowed to avoid crashing the timer loop.
+  }
+}
+
+function makeRefreshTick<TSchema extends z.ZodTypeAny>(args: RefreshTickArgs<TSchema>): () => void {
+  const { schema, normalized, cacheKey, onRefresh, onRefreshError } = args;
+  let inFlight = false;
+
+  return () => {
+    if (inFlight) return;
+    inFlight = true;
+    void (async () => {
+      try {
+        const meta = createInitialMeta(normalized);
+
+        const aws = normalized.providers.aws;
+        if (aws.secretId === undefined || aws.secretId.length === 0) {
+          safeInvoke(onRefreshError, createError("AWS_SECRET_ID_MISSING"));
+          return;
+        }
+
+        const fetchResult = await fetchSecretString({
+          secretId: aws.secretId,
+          timeoutMs: normalized.timeoutMs,
+          ...(aws.region !== undefined ? { region: aws.region } : {}),
+          ...(aws.credentials !== undefined ? { credentials: aws.credentials } : {}),
+        });
+        if (!fetchResult.success) {
+          safeInvoke(onRefreshError, fetchResult.error);
+          return;
+        }
+
+        const parsed = parseJsonSecret(fetchResult.secretString);
+        if (!parsed.success) {
+          safeInvoke(onRefreshError, parsed.error);
+          return;
+        }
+
+        const processEnvValues = sourceUsesProcessEnv(normalized.source)
+          ? snapshotProcessEnv()
+          : undefined;
+
+        const merged = mergeSources({
+          source: normalized.source,
+          providerValues: parsed.data,
+          ...(processEnvValues !== undefined ? { processEnvValues } : {}),
+        });
+
+        const validation = await validateSchema(schema, merged);
+        if (!validation.success) {
+          safeInvoke(
+            onRefreshError,
+            createError("SCHEMA_VALIDATION_FAILED", {
+              issues: validation.issues,
+              cause: validation.error,
+            }),
+          );
+          return;
+        }
+
+        setCachedSecretString(cacheKey, fetchResult.secretString, normalized.cache.ttlMs);
+
+        if (normalized.processEnv.mutate) {
+          const validatedRecord =
+            validation.data &&
+            typeof validation.data === "object" &&
+            !Array.isArray(validation.data)
+              ? (validation.data as Record<string, unknown>)
+              : {};
+          const mutation = mutateProcessEnv(validatedRecord, normalized.processEnv.overwrite);
+          meta.processEnvMutation.writtenKeys = mutation.writtenKeys;
+          meta.processEnvMutation.skippedKeys = mutation.skippedKeys;
+          if (!mutation.success) {
+            safeInvoke(onRefreshError, mutation.error);
+            return;
+          }
+          meta.processEnvMutation.performed = true;
+        }
+
+        safeInvoke(onRefresh, validation.data, meta);
+      } catch (cause) {
+        safeInvoke(onRefreshError, createError("UNKNOWN", { cause }));
+      } finally {
+        inFlight = false;
+      }
+    })();
   };
 }
 
@@ -126,6 +239,8 @@ export async function loadSecrets<
     ...(options.processEnv !== undefined ? { processEnv: options.processEnv } : {}),
     ...(resolvedSource !== undefined ? { source: resolvedSource } : {}),
     ...(resolvedProviders !== undefined ? { providers: resolvedProviders } : {}),
+    ...(options.onRefresh !== undefined ? { onRefresh: options.onRefresh } : {}),
+    ...(options.onRefreshError !== undefined ? { onRefreshError: options.onRefreshError } : {}),
   };
 
   const normalizedResult = normalizeOptions(normalizeInput);
@@ -139,6 +254,7 @@ export async function loadSecrets<
 
   const normalized = normalizedResult.data;
   const meta = createInitialMeta(normalized);
+  let cacheKey: string | undefined;
 
   try {
     let providerValues: Record<string, unknown> | undefined;
@@ -151,7 +267,7 @@ export async function loadSecrets<
       }
 
       let secretString: string | null = null;
-      const cacheKey = buildCacheKey(aws.secretId, aws.region);
+      cacheKey = buildCacheKey(aws.secretId, aws.region);
 
       if (normalized.cache.enabled) {
         secretString = getCachedSecretString(cacheKey);
@@ -222,7 +338,22 @@ export async function loadSecrets<
       meta.processEnvMutation.performed = true;
     }
 
-    return success(meta, validation.data);
+    const result = success(meta, validation.data);
+
+    if (normalized.cache.autoRefresh && cacheKey !== undefined) {
+      const key = cacheKey;
+      const tick = makeRefreshTick<TSchema>({
+        schema: options.schema,
+        normalized,
+        cacheKey: key,
+        ...(options.onRefresh !== undefined ? { onRefresh: options.onRefresh } : {}),
+        ...(options.onRefreshError !== undefined ? { onRefreshError: options.onRefreshError } : {}),
+      });
+      startAutoRefresh(key, normalized.cache.ttlMs, tick);
+      result.stop = () => stopAutoRefresh(key);
+    }
+
+    return result;
   } catch (cause) {
     return failure(meta, createError("UNKNOWN", { cause }));
   }

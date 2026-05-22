@@ -25,6 +25,7 @@ export type ProvidersOption = {
 export type CacheOption = {
   enabled?: boolean;
   ttlMs?: number;
+  autoRefresh?: boolean;
 };
 
 export type ProcessEnvOption = {
@@ -51,6 +52,8 @@ export type LoadSecretsOptions<
   timeoutMs?: number;
   cache?: CacheOption;
   processEnv?: ProcessEnvOption;
+  onRefresh?: (env: z.output<TSchema>, meta: LoadSecretsMeta) => void;
+  onRefreshError?: (error: LoadSecretsError) => void;
 };
 
 export type LoadSecretsErrorCode =
@@ -88,6 +91,7 @@ export type LoadSecretsMeta = {
     enabled: boolean;
     hit: boolean;
     ttlMs?: number;
+    autoRefresh: boolean;
   };
   usedSources: {
     aws: boolean;
@@ -107,6 +111,7 @@ export type LoadSecretsSuccess<TData> = {
   data: TData;
   error: null;
   meta: LoadSecretsMeta;
+  stop?: () => void;
 };
 
 export type LoadSecretsFailure = {
@@ -114,6 +119,7 @@ export type LoadSecretsFailure = {
   data: null;
   error: LoadSecretsError;
   meta: LoadSecretsMeta;
+  stop?: () => void;
 };
 
 export type LoadSecretsResult<TData> = LoadSecretsSuccess<TData> | LoadSecretsFailure;
@@ -131,6 +137,7 @@ export type NormalizedOptions = {
   cache: {
     enabled: boolean;
     ttlMs: number;
+    autoRefresh: boolean;
   };
   processEnv: {
     mutate: boolean;

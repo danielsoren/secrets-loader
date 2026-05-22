@@ -444,31 +444,60 @@ array   -> JSON.stringify(value)
 null/undefined -> skip
 ```
 
-## Cache
+## Cache and auto-refresh
 
-Cache is disabled by default. **It is only useful if you call `loadSecrets` more than once** — for example a long-running service that re-loads config periodically or on a refresh endpoint. For one-shot startup callers (the recommended pattern) the cache provides no benefit.
+The cache has two modes:
+
+1. **Memoization only** (`enabled: true`) — subsequent `loadSecrets` calls for the same `(region, secretId)` skip the AWS round-trip while the entry is fresh.
+2. **Auto-refresh** (`enabled: true, autoRefresh: true`) — the package re-fetches and re-validates the secret every `ttlMs` in the background and delivers the new env through a callback you provide. You do **not** need to call `loadSecrets` again.
+
+Auto-refresh is the mode that pays off for the recommended one-shot startup pattern: load once, register a callback, let the package keep your env current.
 
 ```ts
+import { loadSecrets } from "@danielsoren/secrets-loader";
+
 const result = await loadSecrets({
   schema,
-  providers: {
-    aws: { secretId: "prod/my-api" },
+  providers: { aws: { secretId: "prod/my-api" } },
+  cache: { enabled: true, ttlMs: 60_000, autoRefresh: true },
+  onRefresh: (env, meta) => {
+    // Wire the new env into wherever your app holds config — DB pool reconfig,
+    // cached client rebuilds, feature-flag store updates, etc.
+    updateAppEnv(env);
   },
-  cache: {
-    enabled: true,
-    ttlMs: 60_000,
+  onRefreshError: (error) => {
+    log.warn({ code: error.code, message: error.message }, "secret refresh failed");
   },
 });
+
+if (!result.success) {
+  process.exit(1);
+}
+
+const env = result.data;          // initial snapshot
+const app = createApp({ getEnv: () => currentEnv });
+
+// Graceful shutdown — clear the refresh timer.
+process.on("SIGTERM", () => result.stop?.());
 ```
 
-The cache is an in-process `Map` keyed by `region:secretId`. It stores only the raw fetched secret string, not the final validated config. That means:
+Rules:
 
-- repeated calls within `ttlMs` skip the provider entirely.
-- calls after expiry re-fetch transparently.
-- `process.env` is still re-read on every call.
-- validation still runs on every call.
+- `autoRefresh: true` requires `cache.enabled: true` and **at least one** of: `onRefresh` callback, or `processEnv.mutate: true`. Otherwise the call fails with `INVALID_OPTIONS` — auto-refresh has no place to put new values.
+- If `processEnv.mutate: true` is set alongside `autoRefresh`, each successful refresh also rewrites `process.env` (subject to the same overwrite rules as the initial load).
+- If a refresh fails (AWS down, validation rejects the new payload, etc.), `onRefreshError` is called and the cached value is **not** updated. The next tick fires on schedule — there is no backoff in v1.
+- If a refresh tick is still in flight when the next interval fires, the new tick is skipped.
+- Calling `loadSecrets` twice for the same `(region, secretId)` with `autoRefresh` replaces the prior timer rather than stacking.
+- `result.stop()` clears the timer for that secret. The timer is `setInterval(...).unref()`, so it never blocks process exit on its own, but explicit teardown is still recommended in tests and graceful-shutdown paths.
+- `stopAllAutoRefresh()` is exported for test teardown and emergency stops:
 
-Security note: enabling the cache keeps the secret string in process memory until TTL expires.
+```ts
+import { stopAllAutoRefresh } from "@danielsoren/secrets-loader";
+
+afterEach(() => stopAllAutoRefresh());
+```
+
+Security note: enabling the cache keeps the secret string in process memory.
 
 ## Timeout
 

@@ -1,3 +1,4 @@
+export { stopAllAutoRefresh } from "./core/cache";
 export { loadSecrets } from "./load-secrets";
 export { loadSecretsOrExit } from "./load-secrets-or-exit";
 export { formatLoadSecretsError } from "./utils/format-error";

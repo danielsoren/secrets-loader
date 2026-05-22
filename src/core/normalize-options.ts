@@ -1,4 +1,5 @@
 import {
+  DEFAULT_CACHE_AUTO_REFRESH,
   DEFAULT_CACHE_ENABLED,
   DEFAULT_CACHE_TTL_MS,
   DEFAULT_PROCESS_ENV_MUTATE,
@@ -35,12 +36,20 @@ export function normalizeOptions<TSchema extends import("zod").z.ZodTypeAny>(
 
   const cacheEnabled = options.cache?.enabled ?? DEFAULT_CACHE_ENABLED;
   const cacheTtlMs = options.cache?.ttlMs ?? DEFAULT_CACHE_TTL_MS;
+  const cacheAutoRefresh = options.cache?.autoRefresh ?? DEFAULT_CACHE_AUTO_REFRESH;
   if (cacheEnabled && (!Number.isFinite(cacheTtlMs) || cacheTtlMs <= 0)) {
+    return { success: false, error: createError("INVALID_OPTIONS") };
+  }
+  if (cacheAutoRefresh && !cacheEnabled) {
     return { success: false, error: createError("INVALID_OPTIONS") };
   }
 
   const mutate = options.processEnv?.mutate ?? DEFAULT_PROCESS_ENV_MUTATE;
   const overwrite = options.processEnv?.overwrite ?? DEFAULT_PROCESS_ENV_OVERWRITE;
+
+  if (cacheAutoRefresh && options.onRefresh === undefined && !mutate) {
+    return { success: false, error: createError("INVALID_OPTIONS") };
+  }
 
   const awsInput = options.providers?.aws;
   const aws: NormalizedOptions["providers"]["aws"] = {};
@@ -76,6 +85,7 @@ export function normalizeOptions<TSchema extends import("zod").z.ZodTypeAny>(
       cache: {
         enabled: cacheEnabled,
         ttlMs: cacheTtlMs,
+        autoRefresh: cacheAutoRefresh,
       },
       processEnv: {
         mutate,
