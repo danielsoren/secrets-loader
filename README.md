@@ -141,6 +141,69 @@ export function createApp(ctx: { env: AppEnv }) {
 
 Dependency-injection style is the safest approach: app startup is deterministic and typed.
 
+## Reactive store: hold one env, react to rotations
+
+For long-running services that should track secret rotations without rebuilding their refresh loop, use the store entry points. The store owns the current env, exposes it through `get()`, and notifies subscribers when a refresh produces a structurally different env.
+
+```ts
+import { loadSecretsStoreOrExit } from "@danielsoren/secrets-loader";
+
+const store = await loadSecretsStoreOrExit({
+  schema,
+  providers: { aws: { secretId: "prod/my-api" } },
+  cache: { ttlMs: 60_000 },
+});
+
+// initial read
+const env = store.get();
+const pool = createDbPool(env.DATABASE_URL);
+
+// react to rotations
+const unsubscribe = store.subscribe((next, prev) => {
+  if (next.DATABASE_URL !== prev.DATABASE_URL) {
+    pool.replaceWith(createDbPool(next.DATABASE_URL));
+  }
+});
+
+// graceful shutdown
+process.on("SIGTERM", () => {
+  unsubscribe();
+  store.stop();
+});
+```
+
+**Rule of thumb:**
+
+- `loadSecretsOrExit` — one-shot startup. App reads `result.data` once, gets a frozen snapshot.
+- `loadSecretsStoreOrExit` — long-running service. App reads `store.get()` at use-time, reacts to rotations via `subscribe`.
+
+### Surface
+
+```ts
+type SecretsStore<T> = {
+  get(): T;
+  subscribe(listener: (next: T, prev: T) => void): Unsubscribe;
+  stop(): void;
+};
+```
+
+- `get()` always returns the latest validated env. After `stop()`, it keeps returning the last value.
+- `subscribe(listener)` fires the listener **only when the next refresh produces a structurally different env** (compared via `JSON.stringify`). Identical refreshes are silent — your pool/client code is not asked to rebuild needlessly.
+- Subscribers fire in registration order. Subscribers added during a dispatch fire on the **next** tick, not the current one.
+- A listener that throws is silently swallowed; remaining subscribers in the same dispatch still fire.
+- `subscribe` does not fire on registration. Read the initial value via `store.get()`.
+- `stop()` is idempotent. It clears the refresh timer for this store.
+
+### Options
+
+Both `loadSecretsStore` and `loadSecretsStoreOrExit` accept the same option shape as `loadSecrets` (`schema`, `bootstrap`, `source`, `providers`, `cache.ttlMs`, `timeoutMs`, `processEnv`, `onRefreshError`). `cache.enabled` and `cache.autoRefresh` are forced on internally — the store is the auto-refresh consumer. `onRefresh` is accepted but redundant; prefer `subscribe`.
+
+`onRefreshError` still fires on a refresh failure (AWS down, validation rejects the new payload). The store keeps serving the last successful env; subscribers do not fire on the failed tick.
+
+### Independent timers
+
+Calling `loadSecrets` or `loadSecretsStore` twice for the same `(region, secretId)` with auto-refresh creates **two independent refresh timers** — each call manages its own lifecycle. Both will hit AWS on schedule. Stop them via their individual `stop()`, or call `stopAllAutoRefresh()` to clear everything (typically in test teardown).
+
 ## Less boilerplate: `loadSecretsOrExit`
 
 Every consumer of `loadSecrets` writes the same five lines: check `result.success`, log the error, exit. `loadSecretsOrExit` collapses that into one call and uses Zod's `prettifyError` to render validation issues clearly.

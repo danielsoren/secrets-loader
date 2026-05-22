@@ -4,7 +4,6 @@ type CacheEntry = {
 };
 
 const cache = new Map<string, CacheEntry>();
-const timers = new Map<string, NodeJS.Timeout>();
 
 export function buildCacheKey(secretId: string, region?: string): string {
   return `${region ?? "default"}:${secretId}`;
@@ -29,33 +28,6 @@ export function setCachedSecretString(
   cache.set(key, { value, expiresAt: now + ttlMs });
 }
 
-export function startAutoRefresh(key: string, intervalMs: number, tick: () => void): void {
-  stopAutoRefresh(key);
-  const handle = setInterval(() => {
-    tick();
-  }, intervalMs);
-  if (typeof handle.unref === "function") {
-    handle.unref();
-  }
-  timers.set(key, handle);
-}
-
-export function stopAutoRefresh(key: string): void {
-  const handle = timers.get(key);
-  if (handle !== undefined) {
-    clearInterval(handle);
-    timers.delete(key);
-  }
-}
-
-export function stopAllAutoRefresh(): void {
-  for (const handle of timers.values()) {
-    clearInterval(handle);
-  }
-  timers.clear();
-}
-
 export function clearCache(): void {
-  stopAllAutoRefresh();
   cache.clear();
 }

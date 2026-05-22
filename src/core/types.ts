@@ -124,6 +124,19 @@ export type LoadSecretsFailure = {
 
 export type LoadSecretsResult<TData> = LoadSecretsSuccess<TData> | LoadSecretsFailure;
 
+export type Unsubscribe = () => void;
+
+export type SecretsStore<T> = {
+  get(): T;
+  subscribe(listener: (next: T, prev: T) => void): Unsubscribe;
+  stop(): void;
+};
+
+export type LoadSecretsStoreOptions<
+  TSchema extends z.ZodTypeAny,
+  TBootstrap extends z.ZodTypeAny | undefined = undefined,
+> = LoadSecretsOptions<TSchema, TBootstrap>;
+
 export type NormalizedOptions = {
   source: SecretSourceMode;
   timeoutMs: number;

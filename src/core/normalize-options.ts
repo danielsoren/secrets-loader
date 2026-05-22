@@ -21,8 +21,13 @@ const VALID_SOURCES = new Set([
   "process-env-then-provider",
 ]);
 
+export type NormalizeContext = {
+  forStore?: boolean;
+};
+
 export function normalizeOptions<TSchema extends import("zod").z.ZodTypeAny>(
   options: LoadSecretsOptions<TSchema>,
+  context: NormalizeContext = {},
 ): NormalizeResult {
   const source = options.source ?? DEFAULT_SOURCE;
   if (!VALID_SOURCES.has(source)) {
@@ -47,7 +52,7 @@ export function normalizeOptions<TSchema extends import("zod").z.ZodTypeAny>(
   const mutate = options.processEnv?.mutate ?? DEFAULT_PROCESS_ENV_MUTATE;
   const overwrite = options.processEnv?.overwrite ?? DEFAULT_PROCESS_ENV_OVERWRITE;
 
-  if (cacheAutoRefresh && options.onRefresh === undefined && !mutate) {
+  if (cacheAutoRefresh && !context.forStore && options.onRefresh === undefined && !mutate) {
     return { success: false, error: createError("INVALID_OPTIONS") };
   }
 

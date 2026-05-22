@@ -22,6 +22,7 @@ vi.mock("@aws-sdk/client-secrets-manager", () => {
   };
 });
 
+import { stopAllAutoRefresh } from "../src/core/auto-refresher";
 import { clearCache, getCachedSecretString } from "../src/core/cache";
 import { loadSecrets } from "../src/load-secrets";
 
@@ -55,6 +56,7 @@ beforeEach(() => {
     input,
     __command: "GetSecretValueCommand",
   }));
+  stopAllAutoRefresh();
   clearCache();
   clearTestKeys();
 });
@@ -62,6 +64,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   clearTestKeys();
+  stopAllAutoRefresh();
   clearCache();
 });
 
@@ -259,7 +262,7 @@ describe("loadSecrets — autoRefresh", () => {
     result.stop?.();
   });
 
-  it("calling loadSecrets twice for the same (region, secretId) replaces the timer", async () => {
+  it("two loadSecrets calls for the same (region, secretId) run independent timers", async () => {
     vi.useFakeTimers();
     sendMock.mockResolvedValue({ SecretString: JSON.stringify({ TEST_FLAG: "v" }) });
 
@@ -286,8 +289,16 @@ describe("loadSecrets — autoRefresh", () => {
 
     await vi.advanceTimersByTimeAsync(1000);
     await flushAsync();
-    expect(onRefreshA).not.toHaveBeenCalled();
+    // Both timers tick independently; both subscribers receive the refresh.
+    expect(onRefreshA).toHaveBeenCalledTimes(1);
     expect(onRefreshB).toHaveBeenCalledTimes(1);
+
+    // Stopping r1 leaves r2 ticking.
+    r1.stop?.();
+    await vi.advanceTimersByTimeAsync(1000);
+    await flushAsync();
+    expect(onRefreshA).toHaveBeenCalledTimes(1);
+    expect(onRefreshB).toHaveBeenCalledTimes(2);
 
     r2.stop?.();
   });
