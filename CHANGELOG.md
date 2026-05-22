@@ -1,5 +1,11 @@
 # @danielsoren/secrets-loader
 
+## 0.3.0
+
+### Minor Changes
+
+- re-work cache management
+
 ## 0.2.0
 
 ### Minor Changes
