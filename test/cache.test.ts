@@ -4,7 +4,7 @@ import {
   clearCache,
   getCachedSecretString,
   setCachedSecretString,
-} from "../src/core/cache.js";
+} from "../src/core/cache";
 
 describe("cache", () => {
   afterEach(() => {

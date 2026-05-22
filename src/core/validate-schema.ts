@@ -1,9 +1,9 @@
 import type { z } from "zod";
-import type { LoadSecretsIssue } from "./types.js";
+import type { LoadSecretsIssue } from "./types";
 
 export type ValidateSchemaResult<TData> =
   | { success: true; data: TData }
-  | { success: false; issues: LoadSecretsIssue[] };
+  | { success: false; issues: LoadSecretsIssue[]; error: z.ZodError };
 
 type ZodLikeIssue = {
   path: ReadonlyArray<PropertyKey>;
@@ -14,7 +14,7 @@ type ZodLikeError = {
   issues: ReadonlyArray<ZodLikeIssue>;
 };
 
-function mapIssues(error: ZodLikeError): LoadSecretsIssue[] {
+export function mapIssues(error: ZodLikeError): LoadSecretsIssue[] {
   return error.issues.map((issue) => {
     const path = issue.path.map((p) => String(p)).join(".");
     return {
@@ -32,5 +32,9 @@ export async function validateSchema<TSchema extends z.ZodTypeAny>(
   if (parsed.success) {
     return { success: true, data: parsed.data as z.output<TSchema> };
   }
-  return { success: false, issues: mapIssues(parsed.error as ZodLikeError) };
+  return {
+    success: false,
+    issues: mapIssues(parsed.error as ZodLikeError),
+    error: parsed.error,
+  };
 }

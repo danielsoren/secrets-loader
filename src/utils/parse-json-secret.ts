@@ -1,5 +1,5 @@
-import type { LoadSecretsError } from "../core/types.js";
-import { isPlainRecord } from "./is-plain-record.js";
+import type { LoadSecretsError } from "../core/types";
+import { isPlainRecord } from "./is-plain-record";
 
 export type ParseJsonSecretResult =
   | { success: true; data: Record<string, unknown> }

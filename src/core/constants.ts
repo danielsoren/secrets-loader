@@ -1,4 +1,4 @@
-import type { SecretSourceMode } from "./types.js";
+import type { SecretSourceMode } from "./types";
 
 export const DEFAULT_SOURCE: SecretSourceMode = "provider-then-process-env";
 export const DEFAULT_TIMEOUT_MS = 5000;

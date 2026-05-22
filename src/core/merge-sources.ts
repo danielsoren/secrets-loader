@@ -1,4 +1,4 @@
-import type { SecretSourceMode } from "./types.js";
+import type { SecretSourceMode } from "./types";
 
 export type MergeSourcesInput = {
   source: SecretSourceMode;

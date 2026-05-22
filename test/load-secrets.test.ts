@@ -22,8 +22,8 @@ vi.mock("@aws-sdk/client-secrets-manager", () => {
   };
 });
 
-import { clearCache } from "../src/core/cache.js";
-import { loadSecrets } from "../src/load-secrets.js";
+import { clearCache } from "../src/core/cache";
+import { loadSecrets } from "../src/load-secrets";
 
 const TEST_KEYS = [
   "TEST_DB_URL",

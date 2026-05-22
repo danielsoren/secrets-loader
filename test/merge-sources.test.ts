@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeSources } from "../src/core/merge-sources.js";
+import { mergeSources } from "../src/core/merge-sources";
 
 describe("mergeSources", () => {
   const provider = { A: "aws-A", B: "aws-B" };

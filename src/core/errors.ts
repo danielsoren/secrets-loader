@@ -1,4 +1,4 @@
-import type { LoadSecretsError, LoadSecretsErrorCode, LoadSecretsIssue } from "./types.js";
+import type { LoadSecretsError, LoadSecretsErrorCode, LoadSecretsIssue } from "./types";
 
 const MESSAGES: Record<LoadSecretsErrorCode, string> = {
   AWS_SECRET_ID_MISSING: "AWS secretId is required for the selected source mode.",
@@ -9,6 +9,7 @@ const MESSAGES: Record<LoadSecretsErrorCode, string> = {
   SECRET_JSON_INVALID: "AWS SecretString must be valid JSON.",
   SECRET_JSON_NOT_OBJECT: "AWS SecretString must contain a JSON object.",
   SCHEMA_VALIDATION_FAILED: "Secret validation failed.",
+  BOOTSTRAP_VALIDATION_FAILED: "Bootstrap environment validation failed.",
   PROCESS_ENV_WRITE_FAILED: "Failed to write validated secrets to process.env.",
   TIMEOUT: "Timed out while fetching secret from AWS Secrets Manager.",
   INVALID_OPTIONS: "Invalid loadSecrets options.",

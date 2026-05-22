@@ -2,7 +2,7 @@ import {
   SecretsManagerClient,
   type SecretsManagerClientConfig,
 } from "@aws-sdk/client-secrets-manager";
-import type { AwsCredentialsOption } from "../core/types.js";
+import type { AwsCredentialsOption } from "../core/types";
 
 export type CreateSecretsManagerClientInput = {
   region?: string;

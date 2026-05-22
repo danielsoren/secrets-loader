@@ -3,7 +3,7 @@ import type {
   LoadSecretsFailure,
   LoadSecretsMeta,
   LoadSecretsSuccess,
-} from "./types.js";
+} from "./types";
 
 export function success<TData>(meta: LoadSecretsMeta, data: TData): LoadSecretsSuccess<TData> {
   return {

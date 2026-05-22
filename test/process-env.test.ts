@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mutateProcessEnv, stringifyForEnv } from "../src/core/process-env.js";
+import { mutateProcessEnv, stringifyForEnv } from "../src/core/process-env";
 
 const TEST_KEYS = ["TEST_A", "TEST_B", "TEST_C", "TEST_D", "TEST_E", "TEST_F"];
 

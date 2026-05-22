@@ -5,9 +5,9 @@ import {
   DEFAULT_PROCESS_ENV_OVERWRITE,
   DEFAULT_SOURCE,
   DEFAULT_TIMEOUT_MS,
-} from "./constants.js";
-import { createError } from "./errors.js";
-import type { LoadSecretsError, LoadSecretsOptions, NormalizedOptions } from "./types.js";
+} from "./constants";
+import { createError } from "./errors";
+import type { LoadSecretsError, LoadSecretsOptions, NormalizedOptions } from "./types";
 
 export type NormalizeResult =
   | { success: true; data: NormalizedOptions }

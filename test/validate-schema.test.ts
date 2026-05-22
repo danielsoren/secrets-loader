@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { validateSchema } from "../src/core/validate-schema.js";
+import { validateSchema } from "../src/core/validate-schema";
 
 describe("validateSchema", () => {
   it("returns coerced data on success", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseJsonSecret } from "../src/utils/parse-json-secret.js";
+import { parseJsonSecret } from "../src/utils/parse-json-secret";
 
 describe("parseJsonSecret", () => {
   it("parses a valid JSON object", () => {

@@ -32,10 +32,22 @@ export type ProcessEnvOption = {
   overwrite?: boolean;
 };
 
-export type LoadSecretsOptions<TSchema extends z.ZodTypeAny> = {
+export type SourceOption<TBootstrap> = TBootstrap extends z.ZodTypeAny
+  ? SecretSourceMode | ((bootstrap: z.output<TBootstrap>) => SecretSourceMode)
+  : SecretSourceMode;
+
+export type ProvidersOptionOrFn<TBootstrap> = TBootstrap extends z.ZodTypeAny
+  ? ProvidersOption | ((bootstrap: z.output<TBootstrap>) => ProvidersOption | undefined)
+  : ProvidersOption;
+
+export type LoadSecretsOptions<
+  TSchema extends z.ZodTypeAny,
+  TBootstrap extends z.ZodTypeAny | undefined = undefined,
+> = {
   schema: TSchema;
-  providers?: ProvidersOption;
-  source?: SecretSourceMode;
+  bootstrap?: TBootstrap;
+  providers?: ProvidersOptionOrFn<TBootstrap>;
+  source?: SourceOption<TBootstrap>;
   timeoutMs?: number;
   cache?: CacheOption;
   processEnv?: ProcessEnvOption;
@@ -49,6 +61,7 @@ export type LoadSecretsErrorCode =
   | "SECRET_JSON_INVALID"
   | "SECRET_JSON_NOT_OBJECT"
   | "SCHEMA_VALIDATION_FAILED"
+  | "BOOTSTRAP_VALIDATION_FAILED"
   | "PROCESS_ENV_WRITE_FAILED"
   | "TIMEOUT"
   | "INVALID_OPTIONS"

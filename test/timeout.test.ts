@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { TimeoutError, withTimeout } from "../src/utils/timeout.js";
+import { TimeoutError, withTimeout } from "../src/utils/timeout";
 
 describe("withTimeout", () => {
   it("resolves when the inner promise resolves first", async () => {

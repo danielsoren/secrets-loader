@@ -49,7 +49,7 @@ No import-time magic. No hidden globals. No surprise mutation.
 ## Requirements
 
 ```txt
-Node.js >= 22
+Node.js >= 22 (Bun >= 1.x also supported)
 ESM project
 Backend/server runtime
 ```
@@ -140,6 +140,61 @@ export function createApp(ctx: { env: AppEnv }) {
 ```
 
 Dependency-injection style is the safest approach: app startup is deterministic and typed.
+
+## Less boilerplate: `loadSecretsOrExit`
+
+Every consumer of `loadSecrets` writes the same five lines: check `result.success`, log the error, exit. `loadSecretsOrExit` collapses that into one call and uses Zod's `prettifyError` to render validation issues clearly.
+
+```ts
+import { loadSecretsOrExit } from "@danielsoren/secrets-loader";
+
+const env = await loadSecretsOrExit({
+  schema,
+  providers: { aws: { secretId: "prod/my-api" } },
+});
+
+const app = createApp({ env });
+await app.listen(env.PORT);
+```
+
+On failure, it writes a formatted message (with sanitized issue paths and messages) to `process.stderr` and calls `process.exit(1)`. The standard `loadSecrets` is still there for callers that want to inspect or recover from errors.
+
+## Bootstrap envs: validate before you load
+
+Loading from a managed provider often needs a few envs *to even know what to load* — `NODE_ENV`, `AWS_SECRETS_ID`, `AWS_REGION`. Pass a `bootstrap` schema and the loader validates those first; `source` and `providers` then become functions of the parsed bootstrap.
+
+```ts
+import { loadSecretsOrExit } from "@danielsoren/secrets-loader";
+import { z } from "zod";
+
+const bootstrap = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]),
+  AWS_SECRETS_ID: z.string().min(1),
+  AWS_REGION: z.string().min(1),
+});
+
+const schema = z.object({
+  DATABASE_URL: z.url(),
+  JWT_SECRET: z.string().min(32),
+  PORT: z.coerce.number().int().positive().default(3000),
+});
+
+const env = await loadSecretsOrExit({
+  bootstrap,
+  schema,
+  source: (b) => (b.NODE_ENV === "production" ? "provider-then-process-env" : "process-env-only"),
+  providers: (b) =>
+    b.NODE_ENV === "production"
+      ? { aws: { secretId: b.AWS_SECRETS_ID, region: b.AWS_REGION } }
+      : undefined,
+});
+```
+
+Notes:
+
+- `bootstrap` is parsed synchronously against `process.env` before anything else runs. On failure you get `code: "BOOTSTRAP_VALIDATION_FAILED"` with `issues[]` populated and the original `ZodError` on `error.cause`.
+- The function forms of `source` and `providers` are only accepted at the type level when `bootstrap` is supplied — passing a function without `bootstrap` is a compile error.
+- The parsed bootstrap is **not** exposed in `result.meta`. You already have it; the package treats it as your responsibility to keep private.
 
 ## Source modes
 
@@ -334,17 +389,22 @@ type LoadSecretsErrorCode =
   | "SECRET_JSON_INVALID"
   | "SECRET_JSON_NOT_OBJECT"
   | "SCHEMA_VALIDATION_FAILED"
+  | "BOOTSTRAP_VALIDATION_FAILED"
   | "PROCESS_ENV_WRITE_FAILED"
   | "TIMEOUT"
   | "INVALID_OPTIONS"
   | "UNKNOWN";
 ```
 
+For `SCHEMA_VALIDATION_FAILED` and `BOOTSTRAP_VALIDATION_FAILED`, the original `ZodError` is attached to `error.cause`. You can render it with `z.prettifyError(error.cause)` if you want to do your own formatting; `loadSecretsOrExit` already does this for you.
+
 `AWS_*` codes are emitted when the AWS provider is in use. Future providers will introduce their own prefixed codes alongside these.
 
 Package-generated `message` fields are sanitized and never contain secret values. The optional `cause` field may contain the raw SDK or system error — do not blindly `JSON.stringify(result.error)` into public logs if you cannot trust upstream error contents.
 
-## Optional process.env mutation
+## Legacy interop: process.env mutation
+
+Prefer passing `result.data` to your app explicitly (the dependency-injection pattern shown above). The `processEnv.mutate` option exists for legacy code paths that read directly from `process.env` and cannot be retrofitted.
 
 By default, the package does not write to `process.env`.
 
@@ -384,11 +444,9 @@ array   -> JSON.stringify(value)
 null/undefined -> skip
 ```
 
-Useful for legacy libraries that read directly from `process.env`. The recommended default is still explicit app context / DI.
-
 ## Cache
 
-Cache is disabled by default.
+Cache is disabled by default. **It is only useful if you call `loadSecrets` more than once** — for example a long-running service that re-loads config periodically or on a refresh endpoint. For one-shot startup callers (the recommended pattern) the cache provides no benefit.
 
 ```ts
 const result = await loadSecrets({
@@ -403,9 +461,10 @@ const result = await loadSecrets({
 });
 ```
 
-The cache stores only the fetched secret string, not the final validated config. That means:
+The cache is an in-process `Map` keyed by `region:secretId`. It stores only the raw fetched secret string, not the final validated config. That means:
 
-- repeated provider calls can be avoided.
+- repeated calls within `ttlMs` skip the provider entirely.
+- calls after expiry re-fetch transparently.
 - `process.env` is still re-read on every call.
 - validation still runs on every call.
 

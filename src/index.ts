@@ -1,4 +1,6 @@
-export { loadSecrets } from "./load-secrets.js";
+export { loadSecrets } from "./load-secrets";
+export { loadSecretsOrExit } from "./load-secrets-or-exit";
+export { formatLoadSecretsError } from "./utils/format-error";
 export type {
   AwsCredentialsOption,
   AwsOption,
@@ -13,5 +15,7 @@ export type {
   LoadSecretsSuccess,
   ProcessEnvOption,
   ProvidersOption,
+  ProvidersOptionOrFn,
   SecretSourceMode,
-} from "./core/types.js";
+  SourceOption,
+} from "./core/types";

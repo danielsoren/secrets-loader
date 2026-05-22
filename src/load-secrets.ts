@@ -1,20 +1,24 @@
 import type { z } from "zod";
-import { fetchSecretString } from "./aws/fetch-secret-string.js";
-import { buildCacheKey, getCachedSecretString, setCachedSecretString } from "./core/cache.js";
-import { createError } from "./core/errors.js";
-import { mergeSources } from "./core/merge-sources.js";
-import { normalizeOptions } from "./core/normalize-options.js";
-import { mutateProcessEnv, snapshotProcessEnv } from "./core/process-env.js";
-import { sourceUsesProcessEnv, sourceUsesProvider } from "./core/resolve-source-mode.js";
-import { failure, success } from "./core/result.js";
+import { fetchSecretString } from "./aws/fetch-secret-string";
+import { buildCacheKey, getCachedSecretString, setCachedSecretString } from "./core/cache";
+import { createError } from "./core/errors";
+import { mergeSources } from "./core/merge-sources";
+import { normalizeOptions } from "./core/normalize-options";
+import { mutateProcessEnv, snapshotProcessEnv } from "./core/process-env";
+import { resolveBootstrap } from "./core/resolve-bootstrap";
+import { resolveProviders, resolveSource } from "./core/resolve-options-fn";
+import { sourceUsesProcessEnv, sourceUsesProvider } from "./core/resolve-source-mode";
+import { failure, success } from "./core/result";
 import type {
   LoadSecretsMeta,
   LoadSecretsOptions,
   LoadSecretsResult,
   NormalizedOptions,
-} from "./core/types.js";
-import { validateSchema } from "./core/validate-schema.js";
-import { parseJsonSecret } from "./utils/parse-json-secret.js";
+  ProvidersOption,
+  SecretSourceMode,
+} from "./core/types";
+import { validateSchema } from "./core/validate-schema";
+import { parseJsonSecret } from "./utils/parse-json-secret";
 
 function createInitialMeta(normalized: NormalizedOptions): LoadSecretsMeta {
   const meta: LoadSecretsMeta = {
@@ -48,30 +52,89 @@ function createInitialMeta(normalized: NormalizedOptions): LoadSecretsMeta {
   return meta;
 }
 
-export async function loadSecrets<TSchema extends z.ZodTypeAny>(
-  options: LoadSecretsOptions<TSchema>,
-): Promise<LoadSecretsResult<z.output<TSchema>>> {
-  const normalizedResult = normalizeOptions(options);
+function buildBaseMeta(
+  reportedSource: SecretSourceMode,
+  processEnv: { mutate?: boolean; overwrite?: boolean } | undefined,
+): LoadSecretsMeta {
+  return {
+    source: reportedSource,
+    loadedAt: new Date(),
+    cache: { enabled: false, hit: false },
+    usedSources: {
+      aws: sourceUsesProvider(reportedSource),
+      processEnv: sourceUsesProcessEnv(reportedSource),
+    },
+    processEnvMutation: {
+      requested: processEnv?.mutate ?? false,
+      performed: false,
+      overwrite: processEnv?.overwrite ?? false,
+      writtenKeys: [],
+      skippedKeys: [],
+    },
+  };
+}
+
+export async function loadSecrets<
+  TSchema extends z.ZodTypeAny,
+  TBootstrap extends z.ZodTypeAny | undefined = undefined,
+>(options: LoadSecretsOptions<TSchema, TBootstrap>): Promise<LoadSecretsResult<z.output<TSchema>>> {
+  let bootstrapData: unknown = undefined;
+  const hasBootstrap = options.bootstrap !== undefined;
+
+  if (options.bootstrap !== undefined) {
+    const bootstrapResult = resolveBootstrap(options.bootstrap);
+    if (!bootstrapResult.success) {
+      return failure(
+        buildBaseMeta("provider-then-process-env", options.processEnv),
+        bootstrapResult.error,
+      );
+    }
+    bootstrapData = bootstrapResult.data;
+  }
+
+  const sourceResult = resolveSource(
+    options.source as Parameters<typeof resolveSource>[0],
+    bootstrapData,
+    hasBootstrap,
+  );
+  if (!sourceResult.success) {
+    return failure(
+      buildBaseMeta("provider-then-process-env", options.processEnv),
+      sourceResult.error,
+    );
+  }
+
+  const providersResult = resolveProviders(
+    options.providers as Parameters<typeof resolveProviders>[0],
+    bootstrapData,
+    hasBootstrap,
+  );
+  if (!providersResult.success) {
+    return failure(
+      buildBaseMeta("provider-then-process-env", options.processEnv),
+      providersResult.error,
+    );
+  }
+
+  const resolvedSource: SecretSourceMode | undefined = sourceResult.data;
+  const resolvedProviders: ProvidersOption | undefined = providersResult.data;
+
+  const normalizeInput = {
+    schema: options.schema,
+    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+    ...(options.cache !== undefined ? { cache: options.cache } : {}),
+    ...(options.processEnv !== undefined ? { processEnv: options.processEnv } : {}),
+    ...(resolvedSource !== undefined ? { source: resolvedSource } : {}),
+    ...(resolvedProviders !== undefined ? { providers: resolvedProviders } : {}),
+  };
+
+  const normalizedResult = normalizeOptions(normalizeInput);
 
   if (!normalizedResult.success) {
-    const reportedSource = options.source ?? "provider-then-process-env";
-    const baseMeta: LoadSecretsMeta = {
-      source: reportedSource,
-      loadedAt: new Date(),
-      cache: { enabled: false, hit: false },
-      usedSources: {
-        aws: sourceUsesProvider(reportedSource),
-        processEnv: sourceUsesProcessEnv(reportedSource),
-      },
-      processEnvMutation: {
-        requested: options.processEnv?.mutate ?? false,
-        performed: false,
-        overwrite: options.processEnv?.overwrite ?? false,
-        writtenKeys: [],
-        skippedKeys: [],
-      },
-    };
-    return failure(baseMeta, normalizedResult.error);
+    return failure(
+      buildBaseMeta(resolvedSource ?? "provider-then-process-env", options.processEnv),
+      normalizedResult.error,
+    );
   }
 
   const normalized = normalizedResult.data;
@@ -136,7 +199,13 @@ export async function loadSecrets<TSchema extends z.ZodTypeAny>(
     const validation = await validateSchema(options.schema, merged);
 
     if (!validation.success) {
-      return failure(meta, createError("SCHEMA_VALIDATION_FAILED", { issues: validation.issues }));
+      return failure(
+        meta,
+        createError("SCHEMA_VALIDATION_FAILED", {
+          issues: validation.issues,
+          cause: validation.error,
+        }),
+      );
     }
 
     if (normalized.processEnv.mutate) {

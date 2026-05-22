@@ -1,8 +1,8 @@
 import { GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
-import { createError } from "../core/errors.js";
-import type { AwsCredentialsOption, LoadSecretsError } from "../core/types.js";
-import { TimeoutError, withTimeout } from "../utils/timeout.js";
-import { createSecretsManagerClient } from "./create-secrets-manager-client.js";
+import { createError } from "../core/errors";
+import type { AwsCredentialsOption, LoadSecretsError } from "../core/types";
+import { TimeoutError, withTimeout } from "../utils/timeout";
+import { createSecretsManagerClient } from "./create-secrets-manager-client";
 
 export type FetchSecretStringInput = {
   secretId: string;

@@ -1,5 +1,5 @@
-import { createError } from "./errors.js";
-import type { LoadSecretsError } from "./types.js";
+import { createError } from "./errors";
+import type { LoadSecretsError } from "./types";
 
 export function snapshotProcessEnv(): Record<string, string | undefined> {
   const snapshot: Record<string, string | undefined> = {};
