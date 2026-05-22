@@ -1,6 +1,6 @@
 {
   "name": "@danielsoren/secrets-loader",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Load one JSON secret from a provider (AWS today; pluggable in the future), merge local overrides, validate with Zod, and return typed config.",
   "author": {
     "name": "Daniel Soren",
@@ -12,7 +12,11 @@
   "engines": {
     "node": ">=22"
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -30,7 +34,16 @@
     "test:watch": "vitest",
     "prepublishOnly": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },
-  "keywords": ["secrets", "secrets-manager", "aws", "config", "env", "zod", "typescript", "esm"],
+  "keywords": [
+    "secrets",
+    "secrets-manager",
+    "aws",
+    "config",
+    "env",
+    "zod",
+    "typescript",
+    "esm"
+  ],
   "license": "MIT",
   "publishConfig": {
     "access": "public"
